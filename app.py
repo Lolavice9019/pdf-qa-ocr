@@ -23,16 +23,15 @@ st.set_page_config(
 @st.cache_resource
 def get_client():
     import os
-    api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        st.error("⚠️ OpenAI API key not configured. Please add OPENAI_API_KEY to secrets.")
-        return None
-    return OpenAI(api_key=api_key)
+    try:
+        api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        if api_key:
+            return OpenAI(api_key=api_key)
+    except:
+        pass
+    return None
 
 client = get_client()
-
-if not client:
-    st.stop()
 
 # Document extraction functions
 def extract_pdf(file_bytes):
@@ -247,42 +246,45 @@ if uploaded_files:
     question = st.text_input("Ask a question about your documents:")
     
     if question and st.button("🔍 Get Answer"):
-        with st.spinner("Thinking..."):
-            # Combine selected documents
-            combined_text = "\n\n---\n\n".join([
-                f"Document: {name}\n\n{st.session_state.documents[name]['text']}"
-                for name in selected_docs
-            ])
-            
-            # Query OpenAI
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4.1-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided documents. Always cite which document(s) you're referencing."},
-                        {"role": "user", "content": f"Documents:\n\n{combined_text}\n\nQuestion: {question}"}
-                    ],
-                    temperature=0.7,
-                    max_tokens=1000
-                )
+        if not client:
+            st.error("⚠️ AI Q&A requires OpenAI API key. You can still view and export documents.")
+        else:
+            with st.spinner("Thinking..."):
+                # Combine selected documents
+                combined_text = "\n\n---\n\n".join([
+                    f"Document: {name}\n\n{st.session_state.documents[name]['text']}"
+                    for name in selected_docs
+                ])
                 
-                answer = response.choices[0].message.content
-                
-                st.success("✅ Answer:")
-                st.write(answer)
-                
-                # Save to history
-                if 'qa_history' not in st.session_state:
-                    st.session_state.qa_history = []
-                st.session_state.qa_history.append({
-                    'question': question,
-                    'answer': answer,
-                    'documents': selected_docs,
-                    'timestamp': datetime.now().isoformat()
-                })
-                
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+                # Query OpenAI
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-4.1-mini",
+                        messages=[
+                            {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided documents. Always cite which document(s) you're referencing."},
+                            {"role": "user", "content": f"Documents:\n\n{combined_text}\n\nQuestion: {question}"}
+                        ],
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+                    
+                    answer = response.choices[0].message.content
+                    
+                    st.success("✅ Answer:")
+                    st.write(answer)
+                    
+                    # Save to history
+                    if 'qa_history' not in st.session_state:
+                        st.session_state.qa_history = []
+                    st.session_state.qa_history.append({
+                        'question': question,
+                        'answer': answer,
+                        'documents': selected_docs,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                    
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
     
     # Show Q&A history
     if 'qa_history' in st.session_state and st.session_state.qa_history:
