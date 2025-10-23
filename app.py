@@ -29,16 +29,17 @@ def load_qa_client():
         st.error(f"Error initializing QA client: {e}")
         return None
 
-def extract_text_from_pdf(pdf_file, ocr_model):
+def extract_text_from_pdf(pdf_file, ocr_model, progress_container=None):
     """
     Extract text from a PDF file using OCR
     
     Args:
         pdf_file: Uploaded PDF file
         ocr_model: Initialized PaddleOCR model
+        progress_container: Optional container for progress updates
     
     Returns:
-        tuple: (full text, list of texts per page, list of images)
+        tuple: (full text, list of texts per page, success status)
     """
     try:
         # Convert PDF to images
@@ -49,11 +50,9 @@ def extract_text_from_pdf(pdf_file, ocr_model):
         page_texts = []
         
         # Process each page
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
         for idx, image in enumerate(images):
-            status_text.text(f"Processing page {idx + 1} of {len(images)}...")
+            if progress_container:
+                progress_container.text(f"📄 {pdf_file.name}: Processing page {idx + 1}/{len(images)}")
             
             # Save temporary image
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
@@ -75,30 +74,13 @@ def extract_text_from_pdf(pdf_file, ocr_model):
                 
                 # Clean up temporary file
                 os.unlink(tmp_file.name)
-            
-            # Update progress bar
-            progress_bar.progress((idx + 1) / len(images))
         
-        progress_bar.empty()
-        status_text.empty()
-        return '\n\n'.join(all_text), page_texts, images
+        return '\n\n'.join(all_text), page_texts, True
     
     except Exception as e:
-        st.error(f"Error processing PDF: {e}")
-        
-        # Offer recovery options
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("🔄 Reprocess", key=f"retry_{pdf_file.name}"):
-                return extract_text_from_pdf(pdf_file, ocr_model)
-        with col2:
-            if st.button("⏭️ Ignore error", key=f"ignore_{pdf_file.name}"):
-                return None, None, None
-        with col3:
-            if st.button("🚫 Skip page", key=f"skip_{pdf_file.name}"):
-                return None, None, None
-        
-        return None, None, None
+        if progress_container:
+            progress_container.error(f"❌ Error processing {pdf_file.name}: {e}")
+        return None, None, False
 
 def answer_question(question, context, client, model_name="gpt-4.1-mini"):
     """
@@ -150,6 +132,61 @@ Please answer the question based only on the context provided above."""
     except Exception as e:
         return f"Error processing question: {e}"
 
+def answer_question_multi_doc(question, documents_context, client, model_name="gpt-4.1-mini"):
+    """
+    Answer a question based on multiple documents
+    
+    Args:
+        question: User's question
+        documents_context: Dictionary of {filename: context}
+        client: OpenAI client
+        model_name: Model name to use
+    
+    Returns:
+        str: Answer found
+    """
+    try:
+        # Combine contexts with document labels
+        combined_context = ""
+        for filename, context in documents_context.items():
+            combined_context += f"\n\n=== Document: {filename} ===\n{context[:5000]}\n"
+        
+        # Limit total context
+        max_context_chars = 20000
+        if len(combined_context) > max_context_chars:
+            combined_context = combined_context[:max_context_chars] + "\n\n[... context truncated due to size ...]"
+        
+        # Create prompt for QA
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an assistant specialized in answering questions based on multiple documents. Analyze all provided documents and answer the question precisely. Mention which document(s) contain the relevant information. If the answer is not in any document, clearly state that."
+            },
+            {
+                "role": "user",
+                "content": f"""Multiple documents context:
+{combined_context}
+
+Question: {question}
+
+Please answer the question based on the documents provided above. Cite which document(s) you're referencing."""
+            }
+        ]
+        
+        # Make API call
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.3,
+            max_tokens=700
+        )
+        
+        answer = response.choices[0].message.content
+        return answer
+    
+    except Exception as e:
+        return f"Error processing question: {e}"
+
 def save_ocr_log(filename, page_texts):
     """Save OCR log to file"""
     log_path = f"/home/ubuntu/ocr_logs/{filename}.txt"
@@ -177,9 +214,10 @@ This application allows you to upload PDF documents, extract text using OCR (Pad
 and ask questions about the content using advanced AI for Question Answering.
 
 **Features:**
-- ✅ Upload multiple PDF files (up to 1 GB each)
+- ✅ Upload and batch process multiple PDF files (up to 1 GB each)
 - ✅ Text extraction via OCR with PaddleOCR
 - ✅ Intelligent question answering system
+- ✅ Ask questions across single or multiple documents
 - ✅ View extracted text by page
 - ✅ Automatic processing logs
 """)
@@ -198,52 +236,58 @@ st.header("1. Upload PDF Documents")
 uploaded_files = st.file_uploader(
     "Select one or more PDF files (up to 1 GB each)",
     type=['pdf'],
-    accept_multiple_files=True
+    accept_multiple_files=True,
+    help="You can select multiple files at once using Ctrl+Click (Cmd+Click on Mac)"
 )
 
 # Store data in session
 if 'processed_files' not in st.session_state:
     st.session_state.processed_files = {}
 
-# Process files
+# Batch processing section
 if uploaded_files:
-    for uploaded_file in uploaded_files:
-        file_size_mb = uploaded_file.size / (1024 * 1024)
+    st.markdown(f"**{len(uploaded_files)} file(s) selected**")
+    
+    # Show file list
+    with st.expander("📋 View selected files"):
+        for f in uploaded_files:
+            file_size_mb = f.size / (1024 * 1024)
+            st.write(f"• {f.name} ({file_size_mb:.2f} MB)")
+    
+    # Batch process button
+    unprocessed_files = [f for f in uploaded_files if f.name not in st.session_state.processed_files]
+    
+    if unprocessed_files:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info(f"📦 {len(unprocessed_files)} file(s) ready to process")
+        with col2:
+            process_batch = st.button("🚀 Process All Files", type="primary", use_container_width=True)
         
-        # Check size
-        if file_size_mb > 1024:
-            st.error(f"❌ File '{uploaded_file.name}' exceeds 1 GB limit ({file_size_mb:.2f} MB)")
-            continue
-        
-        # Check if already processed
-        if uploaded_file.name in st.session_state.processed_files:
-            st.info(f"✅ File '{uploaded_file.name}' was already processed")
-            continue
-        
-        # Warn if file is large
-        if file_size_mb > 100:
-            st.warning(f"⚠️ File '{uploaded_file.name}' is large ({file_size_mb:.2f} MB). Processing may take time.")
+        if process_batch:
+            progress_text = st.empty()
+            progress_bar = st.progress(0)
+            status_container = st.container()
             
-            col1, col2 = st.columns(2)
-            process_file = False
+            successful = 0
+            failed = 0
             
-            with col1:
-                if st.button(f"✅ Process anyway", key=f"process_{uploaded_file.name}"):
-                    process_file = True
-            with col2:
-                if st.button(f"⏭️ Skip file", key=f"skip_{uploaded_file.name}"):
-                    st.info(f"File '{uploaded_file.name}' was skipped.")
-                    continue
-        else:
-            process_file = True
-        
-        if process_file:
-            with st.spinner(f"Processing '{uploaded_file.name}' with OCR..."):
-                # Reset file pointer
-                uploaded_file.seek(0)
-                full_text, page_texts, images = extract_text_from_pdf(uploaded_file, ocr_model)
+            for idx, uploaded_file in enumerate(unprocessed_files):
+                file_size_mb = uploaded_file.size / (1024 * 1024)
                 
-                if full_text and page_texts:
+                # Check size
+                if file_size_mb > 1024:
+                    status_container.error(f"❌ File '{uploaded_file.name}' exceeds 1 GB limit ({file_size_mb:.2f} MB)")
+                    failed += 1
+                    continue
+                
+                # Process file
+                progress_text.text(f"Processing {idx + 1}/{len(unprocessed_files)}: {uploaded_file.name}")
+                
+                uploaded_file.seek(0)
+                full_text, page_texts, success = extract_text_from_pdf(uploaded_file, ocr_model, status_container)
+                
+                if success and full_text and page_texts:
                     # Save log
                     log_path = save_ocr_log(uploaded_file.name, page_texts)
                     
@@ -255,19 +299,46 @@ if uploaded_files:
                         'log_path': log_path
                     }
                     
-                    st.success(f"✅ '{uploaded_file.name}' processed successfully! ({len(page_texts)} pages)")
-                    st.balloons()
+                    status_container.success(f"✅ '{uploaded_file.name}' processed successfully! ({len(page_texts)} pages)")
+                    successful += 1
                 else:
-                    st.error(f"❌ Failed to process '{uploaded_file.name}'. Please try again or use another file.")
+                    status_container.error(f"❌ Failed to process '{uploaded_file.name}'")
+                    failed += 1
+                
+                # Update progress
+                progress_bar.progress((idx + 1) / len(unprocessed_files))
+            
+            # Final summary
+            progress_text.empty()
+            progress_bar.empty()
+            
+            st.success(f"🎉 Batch processing complete! ✅ {successful} successful, ❌ {failed} failed")
+            if successful > 0:
+                st.balloons()
+    else:
+        st.success(f"✅ All {len(uploaded_files)} file(s) already processed")
 
 # Display processed documents
 if st.session_state.processed_files:
     st.header("2. Processed Documents")
     
+    # Summary statistics
+    total_pages = sum(data['num_pages'] for data in st.session_state.processed_files.values())
+    total_chars = sum(len(data['full_text']) for data in st.session_state.processed_files.values())
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Documents", len(st.session_state.processed_files))
+    with col2:
+        st.metric("Total Pages", total_pages)
+    with col3:
+        st.metric("Total Characters", f"{total_chars:,}")
+    
+    # Document details
     for filename, data in st.session_state.processed_files.items():
         with st.expander(f"📄 {filename} ({data['num_pages']} pages)"):
             st.markdown(f"**OCR log saved at:** `{data['log_path']}`")
-            st.markdown(f"**Total characters extracted:** {len(data['full_text'])}")
+            st.markdown(f"**Total characters extracted:** {len(data['full_text']):,}")
             
             # Show text by page
             st.subheader("OCR View by Page")
@@ -284,45 +355,115 @@ if st.session_state.processed_files:
     # Question answering system
     st.header("3. Ask Questions")
     
-    # Select document
-    selected_file = st.selectbox(
-        "Select the document to ask questions about:",
-        list(st.session_state.processed_files.keys())
+    # Query mode selection
+    query_mode = st.radio(
+        "Query Mode:",
+        ["Single Document", "Multiple Documents"],
+        help="Choose whether to ask questions about one document or search across all documents"
     )
     
-    if selected_file:
-        context = st.session_state.processed_files[selected_file]['full_text']
+    if query_mode == "Single Document":
+        # Select document
+        selected_file = st.selectbox(
+            "Select the document to ask questions about:",
+            list(st.session_state.processed_files.keys())
+        )
         
-        st.info(f"📊 Selected document: **{selected_file}** ({st.session_state.processed_files[selected_file]['num_pages']} pages)")
+        if selected_file:
+            context = st.session_state.processed_files[selected_file]['full_text']
+            
+            st.info(f"📊 Selected document: **{selected_file}** ({st.session_state.processed_files[selected_file]['num_pages']} pages)")
+            
+            # Question field
+            question = st.text_input("Enter your question:", placeholder="e.g., What is the main topic of the document?")
+            
+            # Advanced options
+            with st.expander("⚙️ Advanced Options"):
+                model_choice = st.selectbox(
+                    "AI Model:",
+                    ["gpt-4.1-mini", "gpt-4.1-nano", "gemini-2.5-flash"],
+                    index=0
+                )
+            
+            if st.button("🔍 Search Answer", type="primary") and question:
+                with st.spinner("Processing question with AI..."):
+                    answer = answer_question(question, context, qa_client, model_choice)
+                    
+                    # Display answer
+                    st.markdown("### 💡 Answer:")
+                    st.success(answer)
+                    
+                    # Update todo.md
+                    update_todo(
+                        selected_file,
+                        st.session_state.processed_files[selected_file]['num_pages'],
+                        question,
+                        answer
+                    )
+                    
+                    st.info("✅ Question and answer logged in `/home/ubuntu/todo.md`")
+    
+    else:  # Multiple Documents mode
+        st.info(f"📚 Searching across **{len(st.session_state.processed_files)}** document(s)")
         
-        # Question field
-        question = st.text_input("Enter your question:", placeholder="e.g., What is the main topic of the document?")
+        # Option to select specific documents or use all
+        use_all_docs = st.checkbox("Use all documents", value=True)
         
-        # Advanced options
-        with st.expander("⚙️ Advanced Options"):
-            model_choice = st.selectbox(
-                "AI Model:",
-                ["gpt-4.1-mini", "gpt-4.1-nano", "gemini-2.5-flash"],
-                index=0
+        if use_all_docs:
+            selected_docs = list(st.session_state.processed_files.keys())
+        else:
+            selected_docs = st.multiselect(
+                "Select documents to search:",
+                list(st.session_state.processed_files.keys()),
+                default=list(st.session_state.processed_files.keys())
             )
         
-        if st.button("🔍 Search Answer", type="primary") and question:
-            with st.spinner("Processing question with AI..."):
-                answer = answer_question(question, context, qa_client, model_choice)
-                
-                # Display answer
-                st.markdown("### 💡 Answer:")
-                st.success(answer)
-                
-                # Update todo.md
-                update_todo(
-                    selected_file,
-                    st.session_state.processed_files[selected_file]['num_pages'],
-                    question,
-                    answer
+        if selected_docs:
+            st.write(f"**Selected {len(selected_docs)} document(s):**")
+            for doc in selected_docs:
+                st.write(f"• {doc}")
+            
+            # Question field
+            question = st.text_input(
+                "Enter your question:", 
+                placeholder="e.g., Which documents mention contract terms?",
+                key="multi_doc_question"
+            )
+            
+            # Advanced options
+            with st.expander("⚙️ Advanced Options"):
+                model_choice = st.selectbox(
+                    "AI Model:",
+                    ["gpt-4.1-mini", "gpt-4.1-nano", "gemini-2.5-flash"],
+                    index=0,
+                    key="multi_doc_model"
                 )
-                
-                st.info("✅ Question and answer logged in `/home/ubuntu/todo.md`")
+            
+            if st.button("🔍 Search Across Documents", type="primary") and question:
+                with st.spinner("Searching across multiple documents with AI..."):
+                    # Prepare contexts
+                    docs_context = {
+                        doc: st.session_state.processed_files[doc]['full_text']
+                        for doc in selected_docs
+                    }
+                    
+                    answer = answer_question_multi_doc(question, docs_context, qa_client, model_choice)
+                    
+                    # Display answer
+                    st.markdown("### 💡 Answer:")
+                    st.success(answer)
+                    
+                    # Update todo.md
+                    update_todo(
+                        f"Multiple Documents ({len(selected_docs)})",
+                        sum(st.session_state.processed_files[doc]['num_pages'] for doc in selected_docs),
+                        question,
+                        answer
+                    )
+                    
+                    st.info("✅ Question and answer logged in `/home/ubuntu/todo.md`")
+        else:
+            st.warning("Please select at least one document")
 
 else:
     st.info("👆 Upload PDF files to get started")
@@ -332,7 +473,7 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
     <p><strong>Built with Streamlit, PaddleOCR, and Advanced AI</strong></p>
-    <p><em>PDF Document Question Answering System</em></p>
+    <p><em>PDF Document Question Answering System with Batch Processing</em></p>
 </div>
 """, unsafe_allow_html=True)
 
