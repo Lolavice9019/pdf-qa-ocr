@@ -1,8 +1,7 @@
 import streamlit as st
-import tempfile
-import os
 from pdf2image import convert_from_bytes
-from paddleocr import PaddleOCR
+from PIL import Image
+import io
 from openai import OpenAI
 from datetime import datetime
 import PyPDF2
@@ -29,8 +28,13 @@ st.set_page_config(
 # Initialize models
 @st.cache_resource
 def load_ocr_model():
-    """Load PaddleOCR model"""
-    return PaddleOCR(use_angle_cls=True, lang='en')
+    """Load OCR model (cached)"""
+    try:
+        from paddleocr import PaddleOCR
+        return PaddleOCR(use_angle_cls=True, lang='en')
+    except Exception as e:
+        st.warning(f"OCR not available: {str(e)}. Text extraction from images will be limited.")
+        return None
 
 @st.cache_resource
 def load_qa_client():
@@ -425,12 +429,17 @@ st.markdown("""
 - ✅ AI-powered question answering
 """)
 
-ocr_model = load_ocr_model()
+# Load models
 qa_client = load_qa_client()
 
 if not qa_client:
-    st.error("⚠️ QA system unavailable")
+    st.error("⚠️ QA system unavailable - OpenAI API key not configured")
     st.stop()
+
+# Try to load OCR (optional)
+ocr_model = load_ocr_model()
+if ocr_model is None:
+    st.info("ℹ️ OCR not available. PDF text extraction and image-based documents will use alternative methods.")
 
 st.header("1. Upload Documents")
 uploaded_files = st.file_uploader(
