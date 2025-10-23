@@ -8,4 +8,12 @@ PyPDF2
 pdfplumber
 pypdf
 pikepdf
+python-docx
+openpyxl
+python-pptx
+markdown
+beautifulsoup4
+lxml
+striprtf
+ebooklib
 
