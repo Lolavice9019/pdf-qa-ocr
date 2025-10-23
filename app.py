@@ -5,6 +5,9 @@ from pdf2image import convert_from_bytes
 from paddleocr import PaddleOCR
 from openai import OpenAI
 from datetime import datetime
+import PyPDF2
+import pdfplumber
+import io
 
 # Page configuration
 st.set_page_config(
@@ -29,9 +32,84 @@ def load_qa_client():
         st.error(f"Error initializing QA client: {e}")
         return None
 
+def extract_text_with_pdfplumber(pdf_file):
+    """
+    Extract text directly from PDF using pdfplumber (no OCR needed)
+    Works best for PDFs with selectable text
+    
+    Args:
+        pdf_file: Uploaded PDF file
+    
+    Returns:
+        tuple: (full text, list of texts per page, success status)
+    """
+    try:
+        pdf_file.seek(0)
+        pdf_bytes = pdf_file.read()
+        
+        all_text = []
+        page_texts = []
+        
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                text = page.extract_text()
+                if text:
+                    page_texts.append(text)
+                    all_text.append(text)
+                else:
+                    page_texts.append("")
+        
+        if all_text:
+            return '\n\n'.join(all_text), page_texts, True
+        return None, None, False
+    
+    except Exception as e:
+        return None, None, False
+
+def extract_text_with_pypdf2(pdf_file):
+    """
+    Extract text directly from PDF using PyPDF2
+    Another fallback method for text extraction
+    
+    Args:
+        pdf_file: Uploaded PDF file
+    
+    Returns:
+        tuple: (full text, list of texts per page, success status)
+    """
+    try:
+        pdf_file.seek(0)
+        pdf_bytes = pdf_file.read()
+        
+        all_text = []
+        page_texts = []
+        
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text = page.extract_text()
+            if text:
+                page_texts.append(text)
+                all_text.append(text)
+            else:
+                page_texts.append("")
+        
+        if all_text:
+            return '\n\n'.join(all_text), page_texts, True
+        return None, None, False
+    
+    except Exception as e:
+        return None, None, False
+
 def extract_text_from_pdf(pdf_file, ocr_model, progress_container=None):
     """
-    Extract text from a PDF file using OCR
+    Extract text from a PDF file using multiple methods with fallbacks
+    
+    Strategy:
+    1. Try pdfplumber (fast, works for text-based PDFs)
+    2. Try PyPDF2 (alternative for text-based PDFs)
+    3. Try OCR with pdf2image (for scanned/image PDFs)
     
     Args:
         pdf_file: Uploaded PDF file
@@ -39,10 +117,36 @@ def extract_text_from_pdf(pdf_file, ocr_model, progress_container=None):
         progress_container: Optional container for progress updates
     
     Returns:
-        tuple: (full text, list of texts per page, success status)
+        tuple: (full text, list of texts per page, success status, method used)
     """
+    filename = pdf_file.name
+    
+    # Method 1: Try pdfplumber first (fastest for text PDFs)
+    if progress_container:
+        progress_container.info(f"📄 {filename}: Attempting text extraction with pdfplumber...")
+    
+    full_text, page_texts, success = extract_text_with_pdfplumber(pdf_file)
+    if success and full_text and len(full_text.strip()) > 100:
+        if progress_container:
+            progress_container.success(f"✅ {filename}: Text extracted successfully with pdfplumber ({len(page_texts)} pages)")
+        return full_text, page_texts, True, "pdfplumber"
+    
+    # Method 2: Try PyPDF2 as fallback
+    if progress_container:
+        progress_container.info(f"📄 {filename}: Trying PyPDF2...")
+    
+    full_text, page_texts, success = extract_text_with_pypdf2(pdf_file)
+    if success and full_text and len(full_text.strip()) > 100:
+        if progress_container:
+            progress_container.success(f"✅ {filename}: Text extracted successfully with PyPDF2 ({len(page_texts)} pages)")
+        return full_text, page_texts, True, "PyPDF2"
+    
+    # Method 3: Try OCR with pdf2image (for scanned documents)
+    if progress_container:
+        progress_container.info(f"📄 {filename}: Attempting OCR extraction (this may take longer)...")
+    
     try:
-        # Convert PDF to images
+        pdf_file.seek(0)
         pdf_bytes = pdf_file.read()
         images = convert_from_bytes(pdf_bytes)
         
@@ -52,7 +156,7 @@ def extract_text_from_pdf(pdf_file, ocr_model, progress_container=None):
         # Process each page
         for idx, image in enumerate(images):
             if progress_container:
-                progress_container.text(f"📄 {pdf_file.name}: Processing page {idx + 1}/{len(images)}")
+                progress_container.text(f"📄 {filename}: OCR processing page {idx + 1}/{len(images)}")
             
             # Save temporary image
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
@@ -75,12 +179,20 @@ def extract_text_from_pdf(pdf_file, ocr_model, progress_container=None):
                 # Clean up temporary file
                 os.unlink(tmp_file.name)
         
-        return '\n\n'.join(all_text), page_texts, True
-    
+        if all_text:
+            if progress_container:
+                progress_container.success(f"✅ {filename}: Text extracted successfully with OCR ({len(page_texts)} pages)")
+            return '\n\n'.join(all_text), page_texts, True, "OCR"
+        
     except Exception as e:
         if progress_container:
-            progress_container.error(f"❌ Error processing {pdf_file.name}: {e}")
-        return None, None, False
+            progress_container.error(f"❌ {filename}: OCR extraction failed - {str(e)}")
+    
+    # All methods failed
+    if progress_container:
+        progress_container.error(f"❌ {filename}: All extraction methods failed. The PDF may be corrupted or encrypted.")
+    
+    return None, None, False, "none"
 
 def answer_question(question, context, client, model_name="gpt-4.1-mini"):
     """
@@ -187,10 +299,13 @@ Please answer the question based on the documents provided above. Cite which doc
     except Exception as e:
         return f"Error processing question: {e}"
 
-def save_ocr_log(filename, page_texts):
+def save_ocr_log(filename, page_texts, method="unknown"):
     """Save OCR log to file"""
     log_path = f"/home/ubuntu/ocr_logs/{filename}.txt"
     with open(log_path, 'w', encoding='utf-8') as f:
+        f.write(f"Extraction Method: {method}\n")
+        f.write(f"Total Pages: {len(page_texts)}\n")
+        f.write("=" * 50 + "\n\n")
         for idx, text in enumerate(page_texts):
             f.write(f"=== Page {idx + 1} ===\n")
             f.write(text)
@@ -210,12 +325,13 @@ def update_todo(filename, num_pages, question, answer):
 # Main interface
 st.title("📄 PDF Question Answering System")
 st.markdown("""
-This application allows you to upload PDF documents, extract text using OCR (PaddleOCR), 
+This application allows you to upload PDF documents, extract text using multiple methods (including OCR), 
 and ask questions about the content using advanced AI for Question Answering.
 
 **Features:**
 - ✅ Upload and batch process multiple PDF files (up to 50 GB each)
-- ✅ Text extraction via OCR with PaddleOCR
+- ✅ Multiple text extraction methods with automatic fallback
+- ✅ Handles both text-based and scanned PDFs
 - ✅ Intelligent question answering system
 - ✅ Ask questions across single or multiple documents
 - ✅ View extracted text by page
@@ -271,42 +387,43 @@ if uploaded_files:
             
             successful = 0
             failed = 0
+            methods_used = {"pdfplumber": 0, "PyPDF2": 0, "OCR": 0}
             
             for idx, uploaded_file in enumerate(unprocessed_files):
                 file_size_mb = uploaded_file.size / (1024 * 1024)
                 
                 # Check size
                 if file_size_mb > 51200:
-                    st.error(f"❌ File '{uploaded_file.name}' exceeds 50 GB limit ({file_size_mb:.2f} MB)")
+                    status_container.error(f"❌ File '{uploaded_file.name}' exceeds 50 GB limit ({file_size_mb:.2f} MB)")
                     failed += 1
                     continue
                 
                 # Warn if file is large
                 if file_size_mb > 1000:
-                    st.warning(f"⚠️ File '{uploaded_file.name}' is large ({file_size_mb:.2f} MB). Processing may take time.")
+                    status_container.warning(f"⚠️ File '{uploaded_file.name}' is large ({file_size_mb:.2f} MB). Processing may take time.")
                 
                 # Process file
                 progress_text.text(f"Processing {idx + 1}/{len(unprocessed_files)}: {uploaded_file.name}")
                 
                 uploaded_file.seek(0)
-                full_text, page_texts, success = extract_text_from_pdf(uploaded_file, ocr_model, status_container)
+                full_text, page_texts, success, method = extract_text_from_pdf(uploaded_file, ocr_model, status_container)
                 
                 if success and full_text and page_texts:
                     # Save log
-                    log_path = save_ocr_log(uploaded_file.name, page_texts)
+                    log_path = save_ocr_log(uploaded_file.name, page_texts, method)
                     
                     # Store in session
                     st.session_state.processed_files[uploaded_file.name] = {
                         'full_text': full_text,
                         'page_texts': page_texts,
                         'num_pages': len(page_texts),
-                        'log_path': log_path
+                        'log_path': log_path,
+                        'method': method
                     }
                     
-                    status_container.success(f"✅ '{uploaded_file.name}' processed successfully! ({len(page_texts)} pages)")
+                    methods_used[method] = methods_used.get(method, 0) + 1
                     successful += 1
                 else:
-                    status_container.error(f"❌ Failed to process '{uploaded_file.name}'")
                     failed += 1
                 
                 # Update progress
@@ -317,7 +434,9 @@ if uploaded_files:
             progress_bar.empty()
             
             st.success(f"🎉 Batch processing complete! ✅ {successful} successful, ❌ {failed} failed")
+            
             if successful > 0:
+                st.info(f"📊 Extraction methods used: pdfplumber={methods_used.get('pdfplumber', 0)}, PyPDF2={methods_used.get('PyPDF2', 0)}, OCR={methods_used.get('OCR', 0)}")
                 st.balloons()
     else:
         st.success(f"✅ All {len(uploaded_files)} file(s) already processed")
@@ -340,12 +459,13 @@ if st.session_state.processed_files:
     
     # Document details
     for filename, data in st.session_state.processed_files.items():
-        with st.expander(f"📄 {filename} ({data['num_pages']} pages)"):
+        with st.expander(f"📄 {filename} ({data['num_pages']} pages) - Method: {data.get('method', 'unknown')}"):
+            st.markdown(f"**Extraction method:** {data.get('method', 'unknown')}")
             st.markdown(f"**OCR log saved at:** `{data['log_path']}`")
             st.markdown(f"**Total characters extracted:** {len(data['full_text']):,}")
             
             # Show text by page
-            st.subheader("OCR View by Page")
+            st.subheader("Text View by Page")
             for idx, page_text in enumerate(data['page_texts']):
                 with st.expander(f"Page {idx + 1}"):
                     st.text_area(
@@ -477,7 +597,7 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
     <p><strong>Built with Streamlit, PaddleOCR, and Advanced AI</strong></p>
-    <p><em>PDF Document Question Answering System with Batch Processing</em></p>
+    <p><em>PDF Document Question Answering System with Robust Multi-Method Extraction</em></p>
 </div>
 """, unsafe_allow_html=True)
 

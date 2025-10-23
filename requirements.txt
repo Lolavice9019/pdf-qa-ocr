@@ -4,4 +4,7 @@ paddleocr
 pdf2image
 Pillow
 openai
+PyPDF2
+pdfplumber
+pypdf
 
