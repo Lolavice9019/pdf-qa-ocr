@@ -214,7 +214,7 @@ This application allows you to upload PDF documents, extract text using OCR (Pad
 and ask questions about the content using advanced AI for Question Answering.
 
 **Features:**
-- ✅ Upload and batch process multiple PDF files (up to 1 GB each)
+- ✅ Upload and batch process multiple PDF files (up to 50 GB each)
 - ✅ Text extraction via OCR with PaddleOCR
 - ✅ Intelligent question answering system
 - ✅ Ask questions across single or multiple documents
@@ -234,7 +234,7 @@ if not qa_client:
 # File upload
 st.header("1. Upload PDF Documents")
 uploaded_files = st.file_uploader(
-    "Select one or more PDF files (up to 1 GB each)",
+    "Select one or more PDF files (up to 50 GB each)",
     type=['pdf'],
     accept_multiple_files=True,
     help="You can select multiple files at once using Ctrl+Click (Cmd+Click on Mac)"
@@ -276,10 +276,14 @@ if uploaded_files:
                 file_size_mb = uploaded_file.size / (1024 * 1024)
                 
                 # Check size
-                if file_size_mb > 1024:
-                    status_container.error(f"❌ File '{uploaded_file.name}' exceeds 1 GB limit ({file_size_mb:.2f} MB)")
+                if file_size_mb > 51200:
+                    st.error(f"❌ File '{uploaded_file.name}' exceeds 50 GB limit ({file_size_mb:.2f} MB)")
                     failed += 1
                     continue
+                
+                # Warn if file is large
+                if file_size_mb > 1000:
+                    st.warning(f"⚠️ File '{uploaded_file.name}' is large ({file_size_mb:.2f} MB). Processing may take time.")
                 
                 # Process file
                 progress_text.text(f"Processing {idx + 1}/{len(unprocessed_files)}: {uploaded_file.name}")
