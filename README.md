@@ -1,197 +1,153 @@
-# 📄 Sistema de Perguntas e Respostas com PDF
+# 📄 Universal Document Q&A System
 
-Sistema inteligente de Question Answering para documentos PDF utilizando OCR (PaddleOCR) para extração de texto e modelos de IA avançados para responder perguntas sobre o conteúdo dos documentos.
+**Process ANY document type and ask questions using AI**
 
-## 🎯 Funcionalidades
+[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io)
+[![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-- **Upload de múltiplos PDFs**: Suporte para upload de vários arquivos PDF simultaneamente (até 1 GB cada)
-- **Extração de texto via OCR**: Utiliza PaddleOCR para extrair texto de documentos digitalizados ou imagens
-- **Question Answering inteligente**: Responde perguntas sobre o conteúdo dos documentos usando modelos de IA de última geração
-- **Visualização por página**: Permite visualizar o texto extraído de cada página individualmente
-- **Logs automáticos**: Registra todas as perguntas e respostas em arquivos de log
-- **Interface amigável**: Interface web moderna e intuitiva construída com Streamlit
+## 🌟 Features
 
-## 🚀 Tecnologias Utilizadas
+- ✅ **Universal Document Support** - PDF, DOCX, PPTX, XLSX, TXT, HTML, RTF, EPUB, Markdown, CSV
+- ✅ **Intelligent Text Extraction** - Automatic method selection per file type
+- ✅ **PDF Repair & OCR** - Handles corrupted PDFs with automatic repair
+- ✅ **Batch Processing** - Process multiple files at once (up to 50 GB each)
+- ✅ **AI-Powered Q&A** - Ask questions about your documents using GPT-4
+- ✅ **Multi-Document Search** - Query across multiple documents simultaneously
+- ✅ **8 Export Formats** - TXT, JSON, HTML, Markdown, DOCX, PDF, CSV, XML
+- ✅ **Real-time Progress** - Track processing status for each file
+- ✅ **Automatic Logging** - All extractions and Q&A saved automatically
 
-- **Streamlit**: Framework para criação da interface web
-- **PaddleOCR**: Sistema de OCR de alta precisão
-- **OpenAI API**: Modelos de linguagem avançados para Question Answering
-- **pdf2image**: Conversão de páginas PDF em imagens
-- **Python 3.11**: Linguagem de programação
+## 🚀 Quick Start
 
-## 📋 Pré-requisitos
+### Option 1: Use Online (Easiest)
 
-- Python 3.11 ou superior
-- Chave de API OpenAI configurada como variável de ambiente `OPENAI_API_KEY`
-- Poppler (para conversão de PDF em imagens)
+Visit the live demo: [Coming Soon - Deploy to Streamlit Cloud]
 
-### Instalação do Poppler
+### Option 2: Run Locally
 
-**Ubuntu/Debian:**
 ```bash
-sudo apt-get install poppler-utils
-```
+# Clone the repository
+git clone https://github.com/Lolavice9019/pdf-qa-ocr.git
+cd pdf-qa-ocr
 
-**macOS:**
-```bash
-brew install poppler
-```
-
-**Windows:**
-Baixe o Poppler do [repositório oficial](https://github.com/oschwartz10612/poppler-windows/releases/)
-
-## 🔧 Instalação
-
-1. Clone ou baixe este repositório
-
-2. Instale as dependências:
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-3. Configure a variável de ambiente com sua chave OpenAI:
-```bash
-export OPENAI_API_KEY="sua-chave-aqui"
-```
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-api-key-here"
 
-## 💻 Como Usar
-
-1. Inicie a aplicação:
-```bash
+# Run the app
 streamlit run app.py
 ```
 
-2. Acesse a aplicação no navegador (geralmente em `http://localhost:8501`)
+Open your browser to `http://localhost:8501`
 
-3. **Upload de documentos:**
-   - Clique em "Browse files" para selecionar um ou mais arquivos PDF
-   - Aguarde o processamento do OCR (pode levar alguns minutos para documentos grandes)
+### Option 3: Deploy Permanently
 
-4. **Fazer perguntas:**
-   - Selecione o documento processado na lista
-   - Digite sua pergunta no campo de texto
-   - Clique em "🔍 Buscar Resposta"
-   - A resposta será exibida logo abaixo
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed instructions on deploying to:
+- Streamlit Cloud (Recommended - FREE)
+- Heroku
+- Railway
+- Google Cloud Run
+- AWS EC2
 
-5. **Visualizar texto extraído:**
-   - Expanda o documento na seção "Documentos Processados"
-   - Navegue pelas páginas para ver o texto extraído via OCR
+## 📚 Supported File Types
 
-## 📁 Estrutura de Arquivos
+### Office Documents
+- **DOCX/DOC** - Microsoft Word
+- **PPTX/PPT** - PowerPoint presentations  
+- **XLSX/XLS** - Excel spreadsheets
 
-```
-pdf_qa_app/
-├── app.py                 # Aplicação principal Streamlit
-├── requirements.txt       # Dependências do projeto
-├── README.md             # Esta documentação
-└── .streamlit/           # Configurações do Streamlit (opcional)
-```
+### Text Formats
+- **TXT** - Plain text
+- **CSV** - Comma-separated values
+- **RTF** - Rich Text Format
+- **MD** - Markdown files
 
-**Arquivos gerados durante o uso:**
+### Web & eBooks
+- **HTML/HTM** - Web pages
+- **EPUB** - eBooks
 
-- `/home/ubuntu/ocr_logs/`: Logs de texto extraído por documento
-- `/home/ubuntu/todo.md`: Registro de perguntas e respostas
+### PDF
+- **PDF** - With automatic repair and OCR fallback
 
-## ⚙️ Configurações Avançadas
+## 🎯 How It Works
 
-### Modelos de IA Disponíveis
+1. **Upload** - Select one or more documents
+2. **Process** - Automatic text extraction using the best method for each file type
+3. **Export** - Download extracted text in 8 different formats
+4. **Ask Questions** - Use AI to get answers from your documents
 
-A aplicação suporta os seguintes modelos:
-- `gpt-4.1-mini` (padrão) - Equilíbrio entre velocidade e qualidade
-- `gpt-4.1-nano` - Mais rápido e econômico
-- `gemini-2.5-flash` - Alternativa do Google
+## 💡 Use Cases
 
-### Limites de Tamanho
+- 📋 **Contract Analysis** - Extract and search contract terms
+- 📊 **Research Papers** - Compare methodologies across papers
+- 💼 **Business Reports** - Find trends across quarterly reports
+- 📖 **Documentation** - Search technical documentation
+- 🎓 **Academic Research** - Analyze multiple research papers
+- 📝 **Legal Documents** - Extract key information from legal files
 
-- **Tamanho máximo por arquivo**: 1 GB
-- **Aviso para arquivos grandes**: Arquivos acima de 100 MB exibem confirmação antes do processamento
-- **Contexto máximo**: 20.000 caracteres (truncado automaticamente se necessário)
+## 🔧 Technology Stack
 
-## 🔍 Critérios de Sucesso
+- **Frontend:** Streamlit
+- **OCR:** PaddleOCR
+- **AI:** OpenAI GPT-4
+- **PDF Processing:** pdfplumber, PyPDF2, pikepdf, pdf2image
+- **Document Processing:** python-docx, python-pptx, openpyxl
+- **Export:** fpdf2, BeautifulSoup, ebooklib
 
-✅ PDF carregado com sucesso  
-✅ Texto extraído corretamente via OCR  
-✅ Resposta coerente e localizada no contexto extraído  
-✅ Upload funcional com múltiplos arquivos e limite ajustável (até 1 GB)  
-✅ Logs salvos automaticamente  
-✅ Interface responsiva e intuitiva  
+## 📊 Export Formats
 
-## 🛠️ Solução de Problemas
+After processing, export your documents in multiple formats:
 
-### Erro ao processar PDF
+| Format | Use Case |
+|--------|----------|
+| **TXT** | Plain text for any editor |
+| **JSON** | Structured data with metadata |
+| **HTML** | View in web browser |
+| **Markdown** | Documentation format |
+| **DOCX** | Microsoft Word |
+| **PDF** | Portable document |
+| **CSV** | Spreadsheet import |
+| **XML** | Data exchange |
 
-**Opções disponíveis:**
-- **Reprocessar**: Tenta processar o arquivo novamente
-- **Ignorar erro**: Pula o arquivo com erro
-- **Pular página**: Ignora apenas a página problemática
+## 🔐 Security & Privacy
 
-### Documento muito grande
+- ✅ All processing happens on your server
+- ✅ Documents are not stored permanently
+- ✅ API keys are never exposed in code
+- ✅ Logs are stored locally only
 
-**Opções disponíveis:**
-- **Processar mesmo assim**: Continua o processamento (pode demorar)
-- **Pular arquivo**: Não processa o arquivo
+## 📖 Documentation
 
-### Erro "OCR model not found"
+- [Deployment Guide](DEPLOYMENT_GUIDE.md) - How to deploy permanently
+- [Batch Processing Guide](BATCH_PROCESSING_GUIDE.md) - Advanced batch features
 
-Execute:
-```bash
-pip install paddleocr paddlepaddle --upgrade
-```
+## 🤝 Contributing
 
-### Erro "OpenAI API key not found"
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-Certifique-se de que a variável de ambiente está configurada:
-```bash
-echo $OPENAI_API_KEY
-```
+## 📝 License
 
-## 📊 Logs e Rastreamento
+This project is licensed under the MIT License.
 
-Todas as operações são registradas em:
+## 🙏 Acknowledgments
 
-1. **Logs de OCR**: `/home/ubuntu/ocr_logs/{nome_arquivo}.txt`
-   - Contém o texto extraído de cada página
-   - Organizado por página
+- Built with [Streamlit](https://streamlit.io/)
+- OCR powered by [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
+- AI powered by [OpenAI](https://openai.com/)
 
-2. **Log de Atividades**: `/home/ubuntu/todo.md`
-   - Nome dos arquivos processados
-   - Número de páginas por documento
-   - Perguntas feitas
-   - Respostas retornadas
-   - Data e hora de cada operação
+## 📞 Support
 
-## 🎨 Personalização
+- **Issues:** [GitHub Issues](https://github.com/Lolavice9019/pdf-qa-ocr/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Lolavice9019/pdf-qa-ocr/discussions)
 
-### Alterar idioma do OCR
+## ⭐ Star This Project
 
-No arquivo `app.py`, linha 19:
-```python
-return PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
-```
-
-Altere `lang='en'` para:
-- `'pt'` - Português
-- `'es'` - Espanhol
-- `'fr'` - Francês
-- etc.
-
-### Alterar modelo padrão de QA
-
-No arquivo `app.py`, na função `answer_question`, altere o parâmetro `model_name`.
-
-## 📝 Licença
-
-Este projeto é fornecido como está, sem garantias.
-
-## 🤝 Contribuições
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
-
-## 📧 Suporte
-
-Para problemas ou dúvidas, abra uma issue no repositório do projeto.
+If you find this useful, please consider giving it a star on GitHub!
 
 ---
 
-**Desenvolvido com ❤️ usando Streamlit, PaddleOCR e IA Avançada**
+**Made with ❤️ for document processing enthusiasts**
 
