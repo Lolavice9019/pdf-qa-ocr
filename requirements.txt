@@ -16,4 +16,5 @@ beautifulsoup4
 lxml
 striprtf
 ebooklib
+fpdf2
 

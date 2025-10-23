@@ -16,6 +16,8 @@ from bs4 import BeautifulSoup
 from striprtf.striprtf import rtf_to_text
 from ebooklib import epub
 import ebooklib
+from fpdf import FPDF
+import csv as csv_module
 
 # Page configuration
 st.set_page_config(
@@ -341,6 +343,75 @@ def update_todo(filename, num_pages, question, answer):
     with open("/home/ubuntu/todo.md", 'a', encoding='utf-8') as f:
         f.write(f"\n## {filename}\n- Pages: {num_pages}\n- Q: {question}\n- A: {answer}\n- Date: {datetime.now()}\n\n")
 
+def export_to_pdf(text, filename):
+    """Export text to PDF"""
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        # Handle unicode by replacing problematic characters
+        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+        for line in safe_text.split('\n'):
+            pdf.multi_cell(0, 10, txt=line)
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception as e:
+        return None
+
+def export_to_docx(text, filename):
+    """Export text to DOCX"""
+    try:
+        doc = Document()
+        doc.add_heading(filename, 0)
+        for paragraph in text.split('\n\n'):
+            if paragraph.strip():
+                doc.add_paragraph(paragraph)
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output.read()
+    except Exception as e:
+        return None
+
+def export_to_html(text, filename):
+    """Export text to HTML"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{filename}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }}
+        h1 {{ color: #333; }}
+        pre {{ background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }}
+    </style>
+</head>
+<body>
+    <h1>{filename}</h1>
+    <pre>{text}</pre>
+</body>
+</html>"""
+    return html.encode('utf-8')
+
+def export_to_csv(documents_dict):
+    """Export multiple documents to CSV"""
+    output = io.StringIO()
+    writer = csv_module.writer(output)
+    writer.writerow(['Filename', 'Method', 'Sections', 'Character Count', 'Full Text'])
+    for filename, data in documents_dict.items():
+        writer.writerow([
+            filename,
+            data['method'],
+            data['num_pages'],
+            len(data['full_text']),
+            data['full_text']
+        ])
+    return output.getvalue().encode('utf-8')
+
+def export_to_markdown(text, filename):
+    """Export text to Markdown"""
+    md = f"# {filename}\n\n{text}"
+    return md.encode('utf-8')
+
 # ========== MAIN UI ==========
 
 st.title("📄 Universal Document Q&A System")
@@ -431,55 +502,143 @@ if st.session_state.processed_files:
     col2.metric("Sections", total_pages)
     col3.metric("Characters", f"{total_chars:,}")
     
-    # Bulk export options
-    st.subheader("Export All Documents")
-    export_col1, export_col2 = st.columns(2)
+    # Multi-format export options
+    st.subheader("📥 Export All Documents")
     
-    with export_col1:
-        # Export all as single text file
-        all_text = ""
-        for filename, data in st.session_state.processed_files.items():
-            all_text += f"{'='*60}\n"
-            all_text += f"FILE: {filename}\n"
-            all_text += f"METHOD: {data['method']}\n"
-            all_text += f"SECTIONS: {data['num_pages']}\n"
-            all_text += f"{'='*60}\n\n"
-            all_text += data['full_text']
-            all_text += "\n\n\n"
-        
+    # Prepare combined text
+    all_text = ""
+    for filename, data in st.session_state.processed_files.items():
+        all_text += f"{'='*60}\n"
+        all_text += f"FILE: {filename}\n"
+        all_text += f"METHOD: {data['method']}\n"
+        all_text += f"SECTIONS: {data['num_pages']}\n"
+        all_text += f"{'='*60}\n\n"
+        all_text += data['full_text']
+        all_text += "\n\n\n"
+    
+    import json
+    all_json = {
+        'export_date': datetime.now().isoformat(),
+        'total_documents': len(st.session_state.processed_files),
+        'total_sections': total_pages,
+        'total_characters': total_chars,
+        'documents': {
+            filename: {
+                'method': data['method'],
+                'num_sections': data['num_pages'],
+                'full_text': data['full_text'],
+                'sections': data['pages']
+            }
+            for filename, data in st.session_state.processed_files.items()
+        }
+    }
+    
+    # Export format selection
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
         st.download_button(
-            label="💾 Download All as Single Text File",
+            label="📝 TXT",
             data=all_text,
-            file_name="all_documents_extracted.txt",
+            file_name="all_documents.txt",
             mime="text/plain",
-            use_container_width=True
+            use_container_width=True,
+            help="Plain text format"
         )
     
-    with export_col2:
-        # Export all as JSON
-        import json
-        all_json = {
-            'export_date': datetime.now().isoformat(),
-            'total_documents': len(st.session_state.processed_files),
-            'total_sections': total_pages,
-            'total_characters': total_chars,
-            'documents': {
-                filename: {
-                    'method': data['method'],
-                    'num_sections': data['num_pages'],
-                    'full_text': data['full_text'],
-                    'sections': data['pages']
-                }
-                for filename, data in st.session_state.processed_files.items()
-            }
-        }
+    with col2:
+        st.download_button(
+            label="📦 JSON",
+            data=json.dumps(all_json, indent=2),
+            file_name="all_documents.json",
+            mime="application/json",
+            use_container_width=True,
+            help="Structured JSON with metadata"
+        )
+    
+    with col3:
+        html_data = export_to_html(all_text, "All Documents")
+        st.download_button(
+            label="🌐 HTML",
+            data=html_data,
+            file_name="all_documents.html",
+            mime="text/html",
+            use_container_width=True,
+            help="Web page format"
+        )
+    
+    with col4:
+        csv_data = export_to_csv(st.session_state.processed_files)
+        st.download_button(
+            label="📊 CSV",
+            data=csv_data,
+            file_name="all_documents.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Spreadsheet format"
+        )
+    
+    col5, col6, col7, col8 = st.columns(4)
+    
+    with col5:
+        md_data = export_to_markdown(all_text, "All Documents")
+        st.download_button(
+            label="📑 Markdown",
+            data=md_data,
+            file_name="all_documents.md",
+            mime="text/markdown",
+            use_container_width=True,
+            help="Markdown format"
+        )
+    
+    with col6:
+        docx_data = export_to_docx(all_text, "All Documents")
+        if docx_data:
+            st.download_button(
+                label="📄 DOCX",
+                data=docx_data,
+                file_name="all_documents.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+                help="Microsoft Word format"
+            )
+    
+    with col7:
+        pdf_data = export_to_pdf(all_text, "All Documents")
+        if pdf_data:
+            st.download_button(
+                label="📝 PDF",
+                data=pdf_data,
+                file_name="all_documents.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                help="PDF format"
+            )
+    
+    with col8:
+        # XML export
+        xml_data = f"""<?xml version="1.0" encoding="UTF-8"?>
+<documents>
+    <export_date>{datetime.now().isoformat()}</export_date>
+    <total_documents>{len(st.session_state.processed_files)}</total_documents>
+"""
+        for filename, data in st.session_state.processed_files.items():
+            xml_data += f"""    <document>
+        <filename>{filename}</filename>
+        <method>{data['method']}</method>
+        <sections>{data['num_pages']}</sections>
+        <text><![CDATA[{data['full_text']}]]></text>
+    </document>
+"""
+        xml_data += "</documents>"
         
         st.download_button(
-            label="📦 Download All as JSON",
-            data=json.dumps(all_json, indent=2),
-            file_name="all_documents_extracted.json",
-            mime="application/json",
-            use_container_width=True
+            label="📜 XML",
+            data=xml_data.encode('utf-8'),
+            file_name="all_documents.xml",
+            mime="application/xml",
+            use_container_width=True,
+            help="XML format"
         )
     
     st.markdown("---")
@@ -490,18 +649,21 @@ if st.session_state.processed_files:
             st.markdown(f"**Method:** `{data['method']}`")
             st.markdown(f"**Log:** `{data['log_path']}`")
             
-            # Download buttons
-            col1, col2 = st.columns(2)
-            with col1:
+            # Download buttons - multiple formats
+            st.markdown("**Export this document:**")
+            dl_col1, dl_col2, dl_col3, dl_col4 = st.columns(4)
+            
+            with dl_col1:
                 st.download_button(
-                    label="💾 Download Extracted Text",
+                    label="📝 TXT",
                     data=data['full_text'],
                     file_name=f"{filename}_extracted.txt",
                     mime="text/plain",
-                    key=f"download_txt_{filename}"
+                    key=f"txt_{filename}",
+                    use_container_width=True
                 )
-            with col2:
-                # Create JSON export
+            
+            with dl_col2:
                 import json
                 json_data = json.dumps({
                     'filename': filename,
@@ -511,12 +673,61 @@ if st.session_state.processed_files:
                     'sections': data['pages']
                 }, indent=2)
                 st.download_button(
-                    label="📦 Download as JSON",
+                    label="📦 JSON",
                     data=json_data,
-                    file_name=f"{filename}_extracted.json",
+                    file_name=f"{filename}.json",
                     mime="application/json",
-                    key=f"download_json_{filename}"
+                    key=f"json_{filename}",
+                    use_container_width=True
                 )
+            
+            with dl_col3:
+                html_data = export_to_html(data['full_text'], filename)
+                st.download_button(
+                    label="🌐 HTML",
+                    data=html_data,
+                    file_name=f"{filename}.html",
+                    mime="text/html",
+                    key=f"html_{filename}",
+                    use_container_width=True
+                )
+            
+            with dl_col4:
+                md_data = export_to_markdown(data['full_text'], filename)
+                st.download_button(
+                    label="📑 MD",
+                    data=md_data,
+                    file_name=f"{filename}.md",
+                    mime="text/markdown",
+                    key=f"md_{filename}",
+                    use_container_width=True
+                )
+            
+            dl_col5, dl_col6, dl_col7, dl_col8 = st.columns(4)
+            
+            with dl_col5:
+                docx_data = export_to_docx(data['full_text'], filename)
+                if docx_data:
+                    st.download_button(
+                        label="📄 DOCX",
+                        data=docx_data,
+                        file_name=f"{filename}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key=f"docx_{filename}",
+                        use_container_width=True
+                    )
+            
+            with dl_col6:
+                pdf_data = export_to_pdf(data['full_text'], filename)
+                if pdf_data:
+                    st.download_button(
+                        label="📕 PDF",
+                        data=pdf_data,
+                        file_name=f"{filename}.pdf",
+                        mime="application/pdf",
+                        key=f"pdf_{filename}",
+                        use_container_width=True
+                    )
             
             for idx, page in enumerate(data['pages']):
                 with st.expander(f"Section {idx + 1}"):
