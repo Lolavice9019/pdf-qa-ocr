@@ -1,0 +1,7 @@
+streamlit
+paddlepaddle
+paddleocr
+pdf2image
+Pillow
+openai
+
