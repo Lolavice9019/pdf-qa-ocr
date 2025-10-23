@@ -22,9 +22,17 @@ st.set_page_config(
 # Initialize OpenAI client
 @st.cache_resource
 def get_client():
-    return OpenAI()
+    import os
+    api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        st.error("⚠️ OpenAI API key not configured. Please add OPENAI_API_KEY to secrets.")
+        return None
+    return OpenAI(api_key=api_key)
 
 client = get_client()
+
+if not client:
+    st.stop()
 
 # Document extraction functions
 def extract_pdf(file_bytes):
