@@ -431,10 +431,92 @@ if st.session_state.processed_files:
     col2.metric("Sections", total_pages)
     col3.metric("Characters", f"{total_chars:,}")
     
+    # Bulk export options
+    st.subheader("Export All Documents")
+    export_col1, export_col2 = st.columns(2)
+    
+    with export_col1:
+        # Export all as single text file
+        all_text = ""
+        for filename, data in st.session_state.processed_files.items():
+            all_text += f"{'='*60}\n"
+            all_text += f"FILE: {filename}\n"
+            all_text += f"METHOD: {data['method']}\n"
+            all_text += f"SECTIONS: {data['num_pages']}\n"
+            all_text += f"{'='*60}\n\n"
+            all_text += data['full_text']
+            all_text += "\n\n\n"
+        
+        st.download_button(
+            label="💾 Download All as Single Text File",
+            data=all_text,
+            file_name="all_documents_extracted.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    
+    with export_col2:
+        # Export all as JSON
+        import json
+        all_json = {
+            'export_date': datetime.now().isoformat(),
+            'total_documents': len(st.session_state.processed_files),
+            'total_sections': total_pages,
+            'total_characters': total_chars,
+            'documents': {
+                filename: {
+                    'method': data['method'],
+                    'num_sections': data['num_pages'],
+                    'full_text': data['full_text'],
+                    'sections': data['pages']
+                }
+                for filename, data in st.session_state.processed_files.items()
+            }
+        }
+        
+        st.download_button(
+            label="📦 Download All as JSON",
+            data=json.dumps(all_json, indent=2),
+            file_name="all_documents_extracted.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    st.markdown("---")
+    st.subheader("Individual Documents")
+    
     for filename, data in st.session_state.processed_files.items():
         with st.expander(f"📄 {filename} ({data['num_pages']} sections) - {data['method']}"):
             st.markdown(f"**Method:** `{data['method']}`")
             st.markdown(f"**Log:** `{data['log_path']}`")
+            
+            # Download buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="💾 Download Extracted Text",
+                    data=data['full_text'],
+                    file_name=f"{filename}_extracted.txt",
+                    mime="text/plain",
+                    key=f"download_txt_{filename}"
+                )
+            with col2:
+                # Create JSON export
+                import json
+                json_data = json.dumps({
+                    'filename': filename,
+                    'method': data['method'],
+                    'num_sections': data['num_pages'],
+                    'full_text': data['full_text'],
+                    'sections': data['pages']
+                }, indent=2)
+                st.download_button(
+                    label="📦 Download as JSON",
+                    data=json_data,
+                    file_name=f"{filename}_extracted.json",
+                    mime="application/json",
+                    key=f"download_json_{filename}"
+                )
             
             for idx, page in enumerate(data['pages']):
                 with st.expander(f"Section {idx + 1}"):
