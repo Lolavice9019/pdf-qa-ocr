@@ -7,4 +7,5 @@ openai
 PyPDF2
 pdfplumber
 pypdf
+pikepdf
 
