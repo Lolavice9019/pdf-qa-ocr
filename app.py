@@ -228,72 +228,53 @@ if uploaded_files:
                 )
             st.divider()
     
-    # Q&A Section
-    st.header("💬 Ask Questions")
+    # Bulk Export Section
+    st.header("📦 Bulk Export All Documents")
     
-    # Select documents to query
-    doc_names = list(st.session_state.documents.keys())
-    if len(doc_names) > 1:
-        selected_docs = st.multiselect(
-            "Select documents to search",
-            doc_names,
-            default=doc_names
+    # Combine all documents
+    all_text = "\n\n==========\n\n".join([
+        f"FILE: {name}\n\n{doc['text']}"
+        for name, doc in st.session_state.documents.items()
+    ])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.download_button(
+            "📝 Download All as TXT",
+            export_txt(all_text, "all_documents"),
+            "all_documents.txt",
+            "text/plain",
+            key="bulk_txt"
         )
-    else:
-        selected_docs = doc_names
-    
-    # Question input
-    question = st.text_input("Ask a question about your documents:")
-    
-    if question and st.button("🔍 Get Answer"):
-        if not client:
-            st.error("⚠️ AI Q&A requires OpenAI API key. You can still view and export documents.")
-        else:
-            with st.spinner("Thinking..."):
-                # Combine selected documents
-                combined_text = "\n\n---\n\n".join([
-                    f"Document: {name}\n\n{st.session_state.documents[name]['text']}"
-                    for name in selected_docs
-                ])
-                
-                # Query OpenAI
-                try:
-                    response = client.chat.completions.create(
-                        model="gpt-4.1-mini",
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided documents. Always cite which document(s) you're referencing."},
-                            {"role": "user", "content": f"Documents:\n\n{combined_text}\n\nQuestion: {question}"}
-                        ],
-                        temperature=0.7,
-                        max_tokens=1000
-                    )
-                    
-                    answer = response.choices[0].message.content
-                    
-                    st.success("✅ Answer:")
-                    st.write(answer)
-                    
-                    # Save to history
-                    if 'qa_history' not in st.session_state:
-                        st.session_state.qa_history = []
-                    st.session_state.qa_history.append({
-                        'question': question,
-                        'answer': answer,
-                        'documents': selected_docs,
-                        'timestamp': datetime.now().isoformat()
-                    })
-                    
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-    
-    # Show Q&A history
-    if 'qa_history' in st.session_state and st.session_state.qa_history:
-        with st.expander("📜 Q&A History"):
-            for i, qa in enumerate(reversed(st.session_state.qa_history)):
-                st.write(f"**Q{len(st.session_state.qa_history)-i}:** {qa['question']}")
-                st.write(f"**A:** {qa['answer']}")
-                st.caption(f"Documents: {', '.join(qa['documents'])}")
-                st.divider()
+    with col2:
+        bulk_json = json.dumps({
+            "exported_at": datetime.now().isoformat(),
+            "document_count": len(st.session_state.documents),
+            "documents": [
+                {
+                    "filename": name,
+                    "text": doc['text'],
+                    "size": doc['size'],
+                    "processed_at": doc['processed_at']
+                }
+                for name, doc in st.session_state.documents.items()
+            ]
+        }, indent=2).encode('utf-8')
+        st.download_button(
+            "📦 Download All as JSON",
+            bulk_json,
+            "all_documents.json",
+            "application/json",
+            key="bulk_json"
+        )
+    with col3:
+        st.download_button(
+            "🌐 Download All as HTML",
+            export_html(all_text, "all_documents"),
+            "all_documents.html",
+            "text/html",
+            key="bulk_html"
+        )
 
 else:
     st.info("👆 Upload documents to get started")
