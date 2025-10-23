@@ -4,6 +4,7 @@ import PyPDF2
 import pdfplumber
 import io
 import json
+import gzip
 from datetime import datetime
 from docx import Document
 from pptx import Presentation
@@ -102,6 +103,24 @@ def extract_text(file_bytes, filename):
             return file_bytes.decode('utf-8', errors='ignore')
         elif ext == 'md':
             return file_bytes.decode('utf-8', errors='ignore')
+        elif ext == 'py':
+            return file_bytes.decode('utf-8', errors='ignore')
+        elif ext == 'json':
+            try:
+                json_data = json.loads(file_bytes.decode('utf-8'))
+                return json.dumps(json_data, indent=2)
+            except:
+                return file_bytes.decode('utf-8', errors='ignore')
+        elif ext == 'env':
+            return file_bytes.decode('utf-8', errors='ignore')
+        elif ext == 'sh':
+            return file_bytes.decode('utf-8', errors='ignore')
+        elif ext == 'gz':
+            try:
+                decompressed = gzip.decompress(file_bytes)
+                return decompressed.decode('utf-8', errors='ignore')
+            except:
+                return "Error: Unable to decompress .gz file"
         elif ext == 'rtf':
             return rtf_to_text(file_bytes.decode('utf-8', errors='ignore'))
         elif ext in ['html', 'htm']:
