@@ -17,7 +17,7 @@ st.set_page_config(
 @st.cache_resource
 def load_ocr_model():
     """Carrega o modelo PaddleOCR"""
-    return PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
+    return PaddleOCR(use_angle_cls=True, lang='en')
 
 @st.cache_resource
 def load_qa_client():
